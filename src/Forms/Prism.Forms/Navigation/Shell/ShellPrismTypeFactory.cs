@@ -13,12 +13,12 @@ namespace Prism.Navigation
 {
     public class ShellPrismTypeFactory : Xamarin.Forms.RouteFactory
     {
-        IContainerExtension _container;
+        IContainerProvider _container;
         string _segmentName;
 
-        public ShellPrismTypeFactory(IContainerExtension containerExtension, string segmentName)
+        public ShellPrismTypeFactory(IContainerProvider containerProvider, string segmentName)
         {
-            _container = containerExtension;
+            _container = containerProvider;
             _segmentName = segmentName;
         }
 

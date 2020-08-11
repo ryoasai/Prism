@@ -1,22 +1,22 @@
-﻿using Prism.Navigation;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Linq;
 using System.Threading.Tasks;
-using Xamarin.Forms;
+using Prism.Behaviors;
 using Prism.Common;
 using Prism.Ioc;
-using Prism.Behaviors;
-using System.Linq;
+using Xamarin.Forms;
 
 namespace Prism.Navigation
 {
     /// <summary>
-    /// Prism's <see cref="INavigationService"/> for <see cref="ShellNavigationService"/>
+    /// Prism's <see cref="INavigationService"/> for <see cref="Shell"/>
     /// </summary>
     public partial class ShellPrismNavigationService : INavigationService
     {
-        private readonly IContainerExtension _container;
+        private Page _currentPage;
+        private INavigationParameters _currentParameters;
+        private IContainerProvider _container { get; }
         private IPageBehaviorFactory _pageBehaviorFactory { get; }
 
         Page CurrentPage => (CurrentShell?.CurrentItem?.CurrentItem as IShellSectionController)?.PresentedPage;
@@ -27,13 +27,13 @@ namespace Prism.Navigation
         /// <summary>
         /// Creates an instance of <see cref="ShellPrismNavigationService"/>
         /// </summary>
-        /// <param name="containerExtension"></param>
+        /// <param name="containerProvider"></param>
         /// <param name="pageBehaviorFactory"></param>
         public ShellPrismNavigationService(
-            IContainerExtension containerExtension,
+            IContainerProvider containerProvider,
             IPageBehaviorFactory pageBehaviorFactory)
         {
-            _container = containerExtension;
+            _container = containerProvider;
             _pageBehaviorFactory = pageBehaviorFactory;
 
             _shell = new Lazy<Shell>(() =>
@@ -64,7 +64,7 @@ namespace Prism.Navigation
             foreach(var item in AllTheKingsItems().OfType<ShellContent>())
             {
                 var closure = Routing.GetRoute(item);
-                if (String.IsNullOrWhiteSpace(closure))
+                if (string.IsNullOrWhiteSpace(closure))
                     throw new Exception("Everything needs a route");
 
                 if(item.ContentTemplate == null)
@@ -80,7 +80,11 @@ namespace Prism.Navigation
 
         void OnNavigating(object sender, ShellNavigatingEventArgs e)
         {
+            // ?? should we set _currentPage here so for reliability
             WireUpTemplates();
+
+            // TODO: Support OnInitializedAsync
+            // PageUtilities.OnInitializedAsync(..., _currentParameters);
         }
 
         void OnNavigated(object sender, ShellNavigatedEventArgs e)
@@ -88,9 +92,6 @@ namespace Prism.Navigation
             PageUtilities.OnNavigatedFrom(_currentPage, _currentParameters);
             PageUtilities.OnNavigatedTo(CurrentPage, _currentParameters);
         }
-
-
-        
 
         protected virtual Page CreatePage(string segmentName)
         {
@@ -156,7 +157,6 @@ namespace Prism.Navigation
         /// Initiates navigation to the target specified by the <paramref name="uri"/>.
         /// </summary>
         /// <param name="uri">The Uri to navigate to</param>
-        /// <remarks>Navigation parameters can be provided in the Uri and by using the <paramref name="parameters"/>.</remarks>
         /// <example>
         /// Navigate(new Uri("MainPage?id=3&amp;name=dan", UriKind.RelativeSource), parameters);
         /// </example>
@@ -164,8 +164,6 @@ namespace Prism.Navigation
         public virtual Task<INavigationResult> NavigateAsync(Uri uri) =>
             NavigateAsync(uri, null);
 
-        Page _currentPage;
-        INavigationParameters _currentParameters;
         /// <summary>
         /// Initiates navigation to the target specified by the <paramref name="uri"/>.
         /// </summary>
@@ -184,7 +182,7 @@ namespace Prism.Navigation
                 _currentParameters = parameters;
                 _currentPage = CurrentPage;
                 var navigationSegments = UriParsingHelper.GetUriSegments(uri);
-                var navUri = String.Join("/", 
+                var navUri = string.Join("/", 
                     navigationSegments
                         .Select(x=> UriParsingHelper.GetSegmentName(x))
                         .ToArray()
@@ -215,7 +213,7 @@ namespace Prism.Navigation
                 // this means a shell item matched
                 if (navigationSegments.Count != pantalooons.Count)
                     navUri = $"//{navUri}";
-                    
+
                 await CurrentShell.GoToAsync(navUri);
                 return new NavigationResult()
                 {
