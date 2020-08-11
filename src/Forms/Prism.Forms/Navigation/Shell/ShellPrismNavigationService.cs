@@ -15,7 +15,9 @@ namespace Prism.Navigation
     public partial class ShellPrismNavigationService : INavigationService
     {
         private Page _currentPage;
+        private Queue<string> _routeSegments;
         private INavigationParameters _currentParameters;
+        private INavigationParameters _segmentParameters;
         private IContainerProvider _container { get; }
         private IPageBehaviorFactory _pageBehaviorFactory { get; }
 
@@ -83,15 +85,46 @@ namespace Prism.Navigation
             // ?? should we set _currentPage here so for reliability
             WireUpTemplates();
 
+            // TODO: Validate this is a good way to get the route parameters... we aren't really able to compare to the current route segment
+            if (_routeSegments != null && _routeSegments.Any())
+            {
+                var segment = _routeSegments.Dequeue();
+                _segmentParameters = UriParsingHelper.GetSegmentParameters(segment, _currentParameters);
+            }
+            else if (_currentParameters != null)
+            {
+                _segmentParameters = UriParsingHelper.GetSegmentParameters("foo?", _currentParameters);
+            }
+            else
+            {
+                _segmentParameters = new NavigationParameters();
+            }
+
+            if (!PageUtilities.CanNavigate(_currentPage, _segmentParameters)
+                //|| !await PageUtilities.CanNavigateAsync(_currentPage, _segmentParameters)
+                )
+            {
+                _segmentParameters = null;
+                e.Cancel();
+                return;
+            }
+
+            // TODO: Determin Navigation Mode which needs to be added to the Navigation Parameters
+            _segmentParameters.GetNavigationParametersInternal().Add(KnownInternalParameters.NavigationMode, NavigationMode.Forward);
             // TODO: Support OnInitializedAsync
-            // PageUtilities.OnInitializedAsync(..., _currentParameters);
+            // var newPage = ....;
+            // PageUtilities.OnInitializedAsync(newPage, _segmentParameters);
         }
 
         void OnNavigated(object sender, ShellNavigatedEventArgs e)
         {
-            PageUtilities.OnNavigatedFrom(_currentPage, _currentParameters);
-            PageUtilities.OnNavigatedTo(CurrentPage, _currentParameters);
+            PageUtilities.OnNavigatedFrom(_currentPage, _segmentParameters);
+            PageUtilities.OnNavigatedTo(CurrentPage, _segmentParameters);
+            _currentPage = CurrentPage;
+            _segmentParameters = null;
         }
+
+        // TODO: Invoke IDestructible when the Page is Popped from the Navigation Stack & no longer needed so we can free up some memory
 
         protected virtual Page CreatePage(string segmentName)
         {
@@ -179,9 +212,9 @@ namespace Prism.Navigation
             try
             {
                 WireUpTemplates();
-                _currentParameters = parameters;
-                _currentPage = CurrentPage;
+                _currentParameters = parameters ?? new NavigationParameters();
                 var navigationSegments = UriParsingHelper.GetUriSegments(uri);
+                _routeSegments = UriParsingHelper.GetUriSegments(uri);
                 var navUri = string.Join("/", 
                     navigationSegments
                         .Select(x=> UriParsingHelper.GetSegmentName(x))
@@ -236,7 +269,12 @@ namespace Prism.Navigation
                     Exception = new NavigationException(NavigationException.UnknownException, null, ex)
                 };
             }
-
+            finally
+            {
+                _currentParameters = null;
+                _routeSegments = null;
+                _segmentParameters = null;
+            }
         }
 
         /// <summary>
